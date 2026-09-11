@@ -263,7 +263,6 @@ st.markdown("""
 st.title("Sovereign Civic Execution Engine")
 st.caption("Translating conversational speech and unstructured demographic inputs into verified, statutory entitlements.")
 
-# API Key Config in Sidebar
 with st.sidebar:
     st.markdown("### Protocol Configuration")
     user_api_key = st.text_input("Gemini API Key (Google AI Studio)", type="password", help="Enter free key from aistudio.google.com")
@@ -278,8 +277,6 @@ col_input, col_audit = st.columns([1, 1], gap="large")
 with col_input:
     st.markdown("### 1. Ingestion Vector")
     mode = st.radio("Select Input Mode", ["Voice / Raw Vernacular Speech", "Structured Manual Input"], horizontal=True)
-    
-    extracted_profile = None
 
     if mode == "Voice / Raw Vernacular Speech":
         st.markdown("**Spoken Dialect Ingestion (Audio / Vernacular Text)**")
@@ -296,18 +293,21 @@ with col_input:
                 try:
                     genai.configure(api_key=user_api_key)
                     
-                    # Robust multi-model selector
-                    model = None
-                    for model_name in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']:
-                        try:
-                            test_model = genai.GenerativeModel(model_name)
-                            model = test_model
-                            break
-                        except:
-                            continue
+                    # DYNAMIC MODEL DISCOVERY: Asks Google which model is active for your key
+                    active_model_name = None
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            # Prefer flash or pro variants
+                            if 'flash' in m.name:
+                                active_model_name = m.name
+                                break
+                            elif 'gemini' in m.name and not active_model_name:
+                                active_model_name = m.name
                     
-                    if not model:
-                        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    if not active_model_name:
+                        active_model_name = "gemini-1.5-flash"
+                        
+                    model = genai.GenerativeModel(active_model_name)
                     
                     extraction_prompt = f"""
                     You are a strict legal data extraction parser. Given the following unstructured citizen statement, extract demographic variables into pure, valid JSON with NO commentary and NO markdown formatting.
@@ -330,12 +330,12 @@ with col_input:
                         "area": "Rural"
                     }}
                     """
-                    with st.spinner("Executing neural variable synthesis..."):
+                    with st.spinner(f"Synthesizing variables via {active_model_name}..."):
                         response = model.generate_content(extraction_prompt)
                         clean_json = response.text.replace("```json", "").replace("```", "").strip()
                         data = json.loads(clean_json)
                         st.session_state['parsed_profile'] = CitizenProfile(**data)
-                        st.success("Extracted Variables Successfully.")
+                        st.success(f"Extracted Variables Successfully using {active_model_name}.")
                 except Exception as e:
                     st.error(f"Extraction Pipeline Failure: {str(e)}")
 
