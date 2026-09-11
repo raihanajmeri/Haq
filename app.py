@@ -312,7 +312,7 @@ with col_input:
                 }}
                 """
                 
-                with st.spinner("Discovering active model & synthesizing variables..."):
+                with st.spinner("Connecting to neural variable synthesis..."):
                     try:
                         clean_key = user_api_key.strip()
                         headers = {"Content-Type": "application/json"}
@@ -322,42 +322,31 @@ with col_input:
                             }]
                         }
                         
-                        # Step A: Query Google API to find which models are actually available for this key
-                        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={clean_key}"
-                        list_res = requests.get(list_url)
-                        models_list_data = list_res.json()
+                        # Direct REST call targeting active 3.6-flash first
+                        candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+                        response_json = None
+                        success = False
+                        last_error = ""
                         
-                        target_model = None
-                        if "models" in models_list_data:
-                            # Search for any model that supports generateContent
-                            for m in models_list_data["models"]:
-                                methods = m.get("supportedGenerationMethods", [])
-                                if "generateContent" in methods:
-                                    m_name = m.get("name", "")
-                                    # Pick the first suitable model found
-                                    if "flash" in m_name:
-                                        target_model = m_name
-                                        break
-                                    elif not target_model:
-                                        target_model = m_name
-                        
-                        # Fallback if list query returned empty
-                        if not target_model:
-                            target_model = "models/gemini-1.5-flash"
-                        
-                        # Step B: Call the discovered model directly
-                        call_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={clean_key}"
-                        res = requests.post(call_url, headers=headers, json=payload)
-                        data = res.json()
-                        
-                        if "error" in data:
-                            st.error(f"API Error from Google: {data['error'].get('message')}")
+                        for m_alias in candidate_models:
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_alias}:generateContent?key={clean_key}"
+                            res = requests.post(url, headers=headers, json=payload)
+                            data = res.json()
+                            if "error" not in data and "candidates" in data:
+                                response_json = data
+                                success = True
+                                break
+                            else:
+                                last_error = data.get("error", {}).get("message", "Unknown error")
+
+                        if not success:
+                            st.error(f"API Error from Google: {last_error}")
                         else:
-                            raw_output = data["candidates"][0]["content"]["parts"][0]["text"]
+                            raw_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
                             clean_json = raw_output.replace("```json", "").replace("```", "").strip()
                             parsed_dict = json.loads(clean_json)
                             st.session_state['parsed_profile'] = CitizenProfile(**parsed_dict)
-                            st.success(f"Extracted Variables Successfully using {target_model}.")
+                            st.success("Extracted Variables Successfully.")
                             st.rerun()
                     except Exception as e:
                         st.error(f"Extraction Pipeline Failure: {str(e)}")
