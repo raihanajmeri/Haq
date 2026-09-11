@@ -305,7 +305,7 @@ with col_input:
                                 active_model_name = m.name
                     
                     if not active_model_name:
-                        active_model_name = "gemini-1.5-flash"
+                       model = genai.GenerativeModel('gemini-3.6-flash')
                         
                     model = genai.GenerativeModel(active_model_name)
                     
