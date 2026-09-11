@@ -1,9 +1,10 @@
+
 import streamlit as st
 import json
 import io
+import requests
 from pydantic import BaseModel, Field
 from typing import Optional, List
-import google.generativeai as genai
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -265,7 +266,7 @@ st.caption("Translating conversational speech and unstructured demographic input
 
 with st.sidebar:
     st.markdown("### Protocol Configuration")
-    user_api_key = st.text_input("Gemini API Key (Google AI Studio)", type="password", help="Enter free key from aistudio.google.com")
+    user_api_key = st.text_input("Gemini API Key (Google AI Studio)", type="password", help="Enter key from aistudio.google.com")
     st.markdown("---")
     st.markdown("#### System Metrics")
     st.caption("• Execution Engine: Neuro-Symbolic Boundary")
@@ -288,56 +289,65 @@ with col_input:
         
         if st.button("EXECUTE NEURO-EXTRACTION", type="primary", use_container_width=True):
             if not user_api_key:
-                st.error("Missing Gemini API Key. Paste your free key in the sidebar configuration.")
+                st.error("Missing Gemini API Key. Paste your key in the sidebar configuration.")
             else:
-                try:
-                    genai.configure(api_key=user_api_key)
-                    
-                    # DYNAMIC MODEL DISCOVERY: Asks Google which model is active for your key
-                    active_model_name = None
-                    for m in genai.list_models():
-                        if 'generateContent' in m.supported_generation_methods:
-                            # Prefer flash or pro variants
-                            if 'flash' in m.name:
-                                active_model_name = m.name
-                                break
-                            elif 'gemini' in m.name and not active_model_name:
-                                active_model_name = m.name
-                    
-                    if not active_model_name:
-                       model = genai.GenerativeModel('gemini-3.6-flash')
+                extraction_prompt = f"""
+                You are a strict legal data extraction parser. Given the following unstructured citizen statement, extract demographic variables into pure, valid JSON with NO commentary and NO markdown formatting.
+                
+                Input Statement: "{raw_speech}"
+                
+                Required JSON structure:
+                {{
+                    "name": "Citizen (auto-assigned if missing)",
+                    "age": 40,
+                    "gender": "Male",
+                    "state": "Gujarat",
+                    "annual_income": 36000,
+                    "disability_pct": 80,
+                    "disability_type": "Locomotor",
+                    "is_widow": false,
+                    "has_bpl_card": false,
+                    "is_orphan": false,
+                    "has_adult_son": false,
+                    "area": "Rural"
+                }}
+                """
+                
+                with st.spinner("Connecting to neural variable synthesis..."):
+                    try:
+                        clean_key = user_api_key.strip()
+                        headers = {"Content-Type": "application/json"}
+                        payload = {
+                            "contents": [{
+                                "parts": [{"text": extraction_prompt}]
+                            }]
+                        }
                         
-                    model = genai.GenerativeModel(active_model_name)
-                    
-                    extraction_prompt = f"""
-                    You are a strict legal data extraction parser. Given the following unstructured citizen statement, extract demographic variables into pure, valid JSON with NO commentary and NO markdown formatting.
-                    
-                    Input Statement: "{raw_speech}"
-                    
-                    Required JSON structure:
-                    {{
-                        "name": "Citizen (auto-assigned if missing)",
-                        "age": 40,
-                        "gender": "Male",
-                        "state": "Gujarat",
-                        "annual_income": 36000,
-                        "disability_pct": 80,
-                        "disability_type": "Locomotor",
-                        "is_widow": false,
-                        "has_bpl_card": false,
-                        "is_orphan": false,
-                        "has_adult_son": false,
-                        "area": "Rural"
-                    }}
-                    """
-                    with st.spinner(f"Synthesizing variables via {active_model_name}..."):
-                        response = model.generate_content(extraction_prompt)
-                        clean_json = response.text.replace("```json", "").replace("```", "").strip()
-                        data = json.loads(clean_json)
-                        st.session_state['parsed_profile'] = CitizenProfile(**data)
-                        st.success(f"Extracted Variables Successfully using {active_model_name}.")
-                except Exception as e:
-                    st.error(f"Extraction Pipeline Failure: {str(e)}")
+                        # Direct REST call testing dynamic model aliases
+                        candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+                        response_json = None
+                        success = False
+                        
+                        for m_alias in candidate_models:
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_alias}:generateContent?key={clean_key}"
+                            res = requests.post(url, headers=headers, json=payload)
+                            data = res.json()
+                            if "error" not in data and "candidates" in data:
+                                response_json = data
+                                success = True
+                                break
+
+                        if not success:
+                            st.error(f"API Error from Google: {data.get('error', {}).get('message', 'Check key permissions')}")
+                        else:
+                            raw_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
+                            clean_json = raw_output.replace("```json", "").replace("```", "").strip()
+                            parsed_dict = json.loads(clean_json)
+                            st.session_state['parsed_profile'] = CitizenProfile(**parsed_dict)
+                            st.success("Extracted Variables Successfully.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Extraction Pipeline Failure: {str(e)}")
 
     else:
         st.markdown("**Manual Structured Entry**")
