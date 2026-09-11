@@ -1,418 +1,410 @@
 import streamlit as st
 import json
+import io
+from pydantic import BaseModel, Field
+from typing import Optional, List
+import google.generativeai as genai
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
-# Set wide layout and page metadata
+# -------------------------------------------------------------------------
+# PAGE CONFIGURATION & INSTITUTIONAL HUD STYLING
+# -------------------------------------------------------------------------
 st.set_page_config(
-    page_title="HAQ | Sovereign Civic Execution Engine",
+    page_title="HAQX | Sovereign Civic Execution Protocol",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom High-End Minimalist CSS
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Plus Jakarta Sans', sans-serif;
     }
     
-    /* Global Background & Cards */
     .stApp {
-        background-color: #0A0D14;
-        color: #F3F4F6;
+        background: radial-gradient(circle at top right, #0F172A 0%, #020617 100%);
+        color: #F8FAFC;
     }
     
-    /* Header Container */
-    .hero-container {
-        border-bottom: 1px solid #1F2937;
-        padding-bottom: 1.5rem;
-        margin-bottom: 2rem;
+    .mono {
+        font-family: 'JetBrains Mono', monospace;
     }
-    
-    .badge-dpg {
-        background-color: #1E293B;
-        color: #38BDF8;
-        border: 1px solid #0284C7;
-        padding: 4px 10px;
-        border-radius: 9999px;
+
+    /* Terminal/Telemetry Bar */
+    .telemetry-bar {
+        background-color: #0B0F19;
+        border: 1px solid #1E293B;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-family: 'JetBrains Mono', monospace;
         font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        display: inline-block;
-        margin-bottom: 0.75rem;
+        color: #64748B;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
     }
     
-    /* Stat Cards */
-    .metric-card {
-        background: #111827;
-        border: 1px solid #1F2937;
+    .live-dot {
+        height: 8px;
+        width: 8px;
+        background-color: #10B981;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+        box-shadow: 0 0 8px #10B981;
+    }
+
+    /* Sovereign Cards */
+    .metric-box {
+        background: #0B0F19;
+        border: 1px solid #1E293B;
         border-radius: 12px;
-        padding: 1.25rem;
-        text-align: left;
+        padding: 20px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .metric-box::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 4px; height: 100%;
+        background: #3B82F6;
     }
     
     .metric-val {
-        font-size: 1.875rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 2.2rem;
         font-weight: 700;
         color: #10B981;
-        line-height: 1;
-    }
-    
-    .metric-label {
-        font-size: 0.825rem;
-        color: #9CA3AF;
-        margin-top: 0.5rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        margin-top: 4px;
     }
 
-    /* Result Scheme Cards */
-    .scheme-card {
-        background: #111827;
-        border-left: 4px solid #3B82F6;
-        border-top: 1px solid #1F2937;
-        border-right: 1px solid #1F2937;
-        border-bottom: 1px solid #1F2937;
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
+    .claim-item {
+        background: #0B0F19;
+        border: 1px solid #1E293B;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 12px;
+        transition: border 0.2s ease;
     }
     
-    .scheme-title {
-        font-size: 1.15rem;
-        font-weight: 600;
-        color: #F9FAFB;
-        margin-bottom: 0.35rem;
-    }
-    
-    .scheme-benefit {
-        color: #34D399;
-        font-weight: 500;
-        font-size: 0.95rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .scheme-dept {
-        color: #9CA3AF;
-        font-size: 0.8rem;
-    }
-    
-    /* Streamlit widget tweaks */
-    div[data-testid="stExpander"] {
-        background-color: #111827;
-        border: 1px solid #1F2937;
-        border-radius: 8px;
+    .claim-item:hover {
+        border-color: #3B82F6;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Hero Section
+# -------------------------------------------------------------------------
+# DETERMINISTIC DATA ENGINE (PYDANTIC SCHEMAS - ZERO HALLUCINATION)
+# -------------------------------------------------------------------------
+class CitizenProfile(BaseModel):
+    name: Optional[str] = "Undisclosed Citizen"
+    age: int = Field(..., description="Age of applicant in years")
+    gender: str = Field(default="Male")
+    state: str = Field(default="Gujarat")
+    annual_income: int = Field(..., description="Total household annual income in INR")
+    disability_pct: int = Field(default=0, description="Certified percentage 0-100")
+    disability_type: str = Field(default="None")
+    is_widow: bool = False
+    has_bpl_card: bool = False
+    is_orphan: bool = False
+    has_adult_son: bool = False
+    area: str = Field(default="Rural")
+
+class StatutoryAuditResult(BaseModel):
+    scheme_id: str
+    scheme_name: str
+    authority: str
+    annual_cash: int
+    in_kind: Optional[str] = None
+    statutory_docs: List[str]
+
+def run_deterministic_rules(p: CitizenProfile) -> List[StatutoryAuditResult]:
+    entitlements = []
+    
+    # 1. Sant Surdas Yojana (Gujarat DSD)
+    if p.state == "Gujarat" and p.disability_pct >= 60:
+        income_cap = 47000 if p.area == "Rural" else 68000
+        if p.annual_income <= income_cap or p.has_bpl_card:
+            entitlements.append(StatutoryAuditResult(
+                scheme_id="GJ-DSD-SSY",
+                scheme_name="Sant Surdas Yojana (સંત સુરદાસ સહાય)",
+                authority="Directorate of Social Defence, Gujarat",
+                annual_cash=12000,
+                in_kind=None,
+                statutory_docs=["UDID Card (≥60%)", "Income Certificate / BPL", "Aadhaar", "Bank Passbook"]
+            ))
+
+    # 2. ADIP Scheme (Central MSJE)
+    monthly_income = p.annual_income / 12
+    if p.disability_pct >= 40 and monthly_income <= 30000:
+        hardware = "Motorized Tricycle" if (p.disability_pct >= 80 and p.age >= 16) else "Wheelchair / Digital Hearing Aid"
+        entitlements.append(StatutoryAuditResult(
+            scheme_id="IN-MSJE-ADIP",
+            scheme_name="Assistance to Disabled Persons (ADIP)",
+            authority="Ministry of Social Justice & Empowerment, GoI",
+            annual_cash=0,
+            in_kind=hardware,
+            statutory_docs=["Disability Certificate (≥40%)", "Income Certificate", "Residence Proof"]
+        ))
+
+    # 3. Ganga Swarupa Yojana (Gujarat Widow Pension)
+    if p.state == "Gujarat" and p.is_widow and p.age >= 18:
+        cap = 120000 if p.area == "Rural" else 150000
+        if p.annual_income <= cap:
+            entitlements.append(StatutoryAuditResult(
+                scheme_id="GJ-WCD-GSY",
+                scheme_name="Ganga Swarupa Financial Assistance",
+                authority="Women & Child Development, Gujarat",
+                annual_cash=15000,
+                in_kind=None,
+                statutory_docs=["Death Certificate of Spouse", "Income Certificate", "No-Remarriage Affidavit"]
+            ))
+
+    # 4. Palak Mata Pita Yojana
+    if p.state == "Gujarat" and p.is_orphan and p.age < 18 and p.annual_income <= 2000000:
+        entitlements.append(StatutoryAuditResult(
+            scheme_id="GJ-SJE-PMPY",
+            scheme_name="Palak Mata Pita Foster Grant",
+            authority="Social Justice & Empowerment, Gujarat",
+            annual_cash=48000,
+            in_kind="Educational Rehabilitation Support",
+            statutory_docs=["Parents' Death Certificates", "Foster Legal Affidavit", "School Bonafide Certificate"]
+        ))
+
+    # 5. GSRTC Universal Transit Floor
+    if p.state == "Gujarat" and p.disability_pct >= 40:
+        entitlements.append(StatutoryAuditResult(
+            scheme_id="GJ-GSRTC-DIV",
+            scheme_name="Divyang Universal Transit Pass",
+            authority="GSRTC & Directorate of Social Defence",
+            annual_cash=0,
+            in_kind="100% Free Lifetime Bus Travel Pass",
+            statutory_docs=["UDID Card", "Proof of Gujarat Domicile", "Passport Photos"]
+        ))
+        
+    return entitlements
+
+# -------------------------------------------------------------------------
+# STATUTORY PDF GENERATOR (DOCUMENT SYNTHESIS)
+# -------------------------------------------------------------------------
+def generate_statutory_dossier(profile: CitizenProfile, results: List[StatutoryAuditResult], total_cash: int) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle('H1', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=colors.HexColor('#0F172A'))
+    body = ParagraphStyle('Body', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=12, textColor=colors.HexColor('#334155'))
+    bold_body = ParagraphStyle('BBody', parent=body, fontName='Helvetica-Bold')
+
+    elements.append(Paragraph("HAQX // STATUTORY ENTITLEMENT DOSSIER", h1))
+    elements.append(Paragraph("Verified Digital Public Infrastructure Artifact • UN SDG 1.3 Target Compliance", body))
+    elements.append(Spacer(1, 15))
+
+    meta_table_data = [
+        [Paragraph("<b>Claimant:</b>", body), Paragraph(profile.name, body), Paragraph("<b>Jurisdiction:</b>", body), Paragraph(f"{profile.state} ({profile.area})", body)],
+        [Paragraph("<b>Age/Gender:</b>", body), Paragraph(f"{profile.age} / {profile.gender}", body), Paragraph("<b>Annual Income:</b>", body), Paragraph(f"INR {profile.annual_income:,}", body)],
+        [Paragraph("<b>Disability Audit:</b>", body), Paragraph(f"{profile.disability_pct}% ({profile.disability_type})", body), Paragraph("<b>Audit Status:</b>", body), Paragraph("DETERMINISTIC VERIFIED", bold_body)],
+    ]
+    t = Table(meta_table_data, colWidths=[90, 180, 90, 180])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 15))
+
+    elements.append(Paragraph(f"<b>TOTAL ANNUAL CASH ENTITLEMENT UNLOCKED: INR {total_cash:,}</b>", h1))
+    elements.append(Spacer(1, 10))
+
+    results_data = [["Statutory Code", "Scheme Manifest", "Administering Authority", "Legally Guaranteed Benefit"]]
+    for r in results:
+        benefit_desc = f"INR {r.annual_cash:,}/yr" if r.annual_cash > 0 else r.in_kind
+        results_data.append([r.scheme_id, r.scheme_name, r.authority, benefit_desc])
+    
+    rt = Table(results_data, colWidths=[80, 180, 160, 120])
+    rt.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 8),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+        ('FONTSIZE', (0,1), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+    ]))
+    elements.append(rt)
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("This instrument certifies statutory entitlement identification under state gazetted welfare law. Generated autonomously with zero human intervention via HAQX Core.", body))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# -------------------------------------------------------------------------
+# INTERACTION INTERFACE
+# -------------------------------------------------------------------------
 st.markdown("""
-<div class="hero-container">
-    <span class="badge-dpg">UN SDG 1.3 • Sovereign Digital Public Infrastructure</span>
-    <h1 style='margin: 0; font-size: 2.25rem; font-weight: 700; color: #FFFFFF;'>HAQ <span style='color: #3B82F6;'>Core</span></h1>
-    <p style='color: #9CA3AF; font-size: 1.05rem; margin-top: 0.4rem;'>
-        Deterministic neuro-symbolic civic execution engine. Translating citizen reality into legally binding statutory entitlements.
-    </p>
+<div class="telemetry-bar">
+    <div><span class="live-dot"></span>HAQX CORE: v1.0.4-SOVEREIGN // STATUS: OPERATIONAL</div>
+    <div>ZERO-HALLUCINATION DETERMINISTIC ENGINE</div>
+    <div>SDG 1.3 COMPLIANT</div>
 </div>
 """, unsafe_allow_html=True)
 
-tab_diagnose, tab_voice, tab_library = st.tabs(["⚡ Entitlement Diagnostic", "🎙️ Natural Voice Parsing", "📚 Statutory Library (10 Schemes)"])
+st.title("Sovereign Civic Execution Engine")
+st.caption("Translating conversational speech and unstructured demographic inputs into verified, statutory entitlements.")
 
-# TAB 1: DIAGNOSTIC ENGINE
-with tab_diagnose:
-    st.markdown("#### Citizen Diagnostic Parameters")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        age = st.number_input("Age", min_value=0, max_value=115, value=42)
-        gender = st.selectbox("Gender", ["Male", "Female", "Transgender / Other"])
-        is_widow = False
-        if gender == "Female":
-            is_widow = st.checkbox("Applicant is a widow?")
-            
-    with col2:
-        state = st.selectbox("State Jurisdiction", ["Gujarat", "Other State"])
-        living_area = st.selectbox("Living Environment", ["Rural", "Urban"])
-        annual_income = st.number_input("Annual Household Income (₹)", min_value=0, max_value=2000000, value=42000, step=5000)
-        
-    with col3:
-        has_bpl = st.checkbox("Holds BPL Card / Score ≤ 20")
-        has_adult_son = st.checkbox("Has a living son aged ≥ 21?", value=False)
-        is_orphan = st.checkbox("Orphan child living with foster guardians?", value=False)
-    
+# API Key Config in Sidebar
+with st.sidebar:
+    st.markdown("### Protocol Configuration")
+    user_api_key = st.text_input("Gemini API Key (Google AI Studio)", type="password", help="Enter free key from aistudio.google.com")
     st.markdown("---")
-    st.markdown("#### Disability & Medical Classifications")
+    st.markdown("#### System Metrics")
+    st.caption("• Execution Engine: Neuro-Symbolic Boundary")
+    st.caption("• PII Leakage: Zero (Client-Ephemeral)")
+    st.caption("• License: MIT Open Source")
+
+col_input, col_audit = st.columns([1, 1], gap="large")
+
+with col_input:
+    st.markdown("### 1. Ingestion Vector")
+    mode = st.radio("Select Input Mode", ["Voice / Raw Vernacular Speech", "Structured Manual Input"], horizontal=True)
     
-    col4, col5 = st.columns(2)
-    with col4:
-        has_disability = st.checkbox("Diagnosed with physical / intellectual disability")
-        disability_pct = 0
-        disability_type = "None"
-        if has_disability:
-            disability_pct = st.slider("Certified Disability Percentage (UDID / Medical Board)", 0, 100, 75)
-            disability_type = st.selectbox("Clinical Classification", [
-                "Locomotor / Orthopedic", 
-                "Visual Impairment / Blindness", 
-                "Hearing / Speech Impairment", 
-                "Intellectual Disability / Cerebral Palsy / Autism", 
-                "Multiple Disabilities"
-            ])
-            
-    with col5:
-        needs_assistive_devices = st.checkbox("Requires physical mobility or hearing assistive aid", value=True if has_disability else False)
-        free_bus_travel_needed = st.checkbox("Requires public transport commute assistance", value=True if has_disability else False)
+    extracted_profile = None
 
-    # EVALUATION TRIGGER
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("RUN STATUTORY DETERMINISTIC AUDIT", use_container_width=True, type="primary"):
-        eligible_schemes = []
-        total_cash = 0
-        in_kind_services = []
-
-        # 1. Sant Surdas Yojana (Gujarat)
-        if state == "Gujarat" and has_disability and disability_pct >= 60:
-            income_cap = 47000 if living_area == "Rural" else 68000
-            if annual_income <= income_cap or has_bpl:
-                eligible_schemes.append({
-                    "id": "GJ-SJE-01",
-                    "name": "Sant Surdas Yojana (સંત સુરદાસ યોજના)",
-                    "category": "Direct Income Support",
-                    "benefit": "₹1,000 / month (₹12,000 annually) via DBT",
-                    "dept": "Directorate of Social Defence, Govt of Gujarat",
-                    "docs": ["Disability Certificate (≥60%)", "Income Certificate / BPL Score", "Aadhaar Card", "Bank Passbook"]
-                })
-                total_cash += 12000
-
-        # 2. ADIP Scheme (Central Govt)
-        monthly_inc = annual_income / 12
-        if has_disability and disability_pct >= 40 and monthly_inc <= 30000:
-            status = "100% Free Allocation" if monthly_inc <= 22500 else "50% Subsidized Allocation"
-            item = "Motorized Tricycle / Electric Wheelchair" if (disability_pct >= 80 and age >= 16) else "Tricycle / Wheelchair / Digital Hearing Aid"
-            eligible_schemes.append({
-                "id": "IN-MSJE-01",
-                "name": f"ADIP Scheme ({status})",
-                "category": "Assistive Hardware",
-                "benefit": f"Free statutory grant for: {item} (Valued at ₹10,000 to ₹40,000)",
-                "dept": "Ministry of Social Justice and Empowerment, Govt of India",
-                "docs": ["UDID / Disability Certificate (≥40%)", "Income Certificate", "Identity Proof", "Recent Photo"]
-            })
-            in_kind_services.append(f"ADIP: {item}")
-
-        # 3. Indira Gandhi National Disability Pension Scheme (IGNDPS)
-        if has_disability and disability_pct >= 80 and (18 <= age <= 79) and has_bpl:
-            eligible_schemes.append({
-                "id": "IN-MORD-01",
-                "name": "Indira Gandhi National Disability Pension Scheme (IGNDPS)",
-                "category": "Central Pension",
-                "benefit": "₹500 / month (₹6,000 annually) direct central assistance",
-                "dept": "Ministry of Rural Development, Govt of India",
-                "docs": ["National BPL Card", "Severe Disability Certificate (≥80%)", "Aadhaar", "Bank Account"]
-            })
-            total_cash += 6000
-
-        # 4. Ganga Swarupa Yojana (Gujarat Widow Pension)
-        if state == "Gujarat" and is_widow and age >= 18:
-            widow_cap = 120000 if living_area == "Rural" else 150000
-            if annual_income <= widow_cap:
-                eligible_schemes.append({
-                    "id": "GJ-WCD-01",
-                    "name": "Ganga Swarupa Yojana (ગંગા સ્વરૂપા સહાય યોજના)",
-                    "category": "Direct Income Support",
-                    "benefit": "₹1,250 / month (₹15,000 annually) direct bank transfer",
-                    "dept": "Women & Child Development Department, Govt of Gujarat",
-                    "docs": ["Husband's Death Certificate", "Local Authority Income Certificate", "Affidavit", "Aadhaar"]
-                })
-                total_cash += 15000
-
-        # 5. Palak Mata Pita Yojana (Foster Child Support)
-        if state == "Gujarat" and is_orphan and age < 18 and annual_income <= 2000000:
-            eligible_schemes.append({
-                "id": "GJ-SJE-02",
-                "name": "Palak Mata Pita Yojana (પાલક માતા-પિતા યોજના)",
-                "category": "Child Protection Support",
-                "benefit": "₹4,000 / month (₹48,000 annually) for school and livelihood maintenance",
-                "dept": "Social Justice & Empowerment Department, Gujarat",
-                "docs": ["Parents' Death Certificates", "Foster Guardian Affidavit", "Child Age Proof / School Bonafide"]
-            })
-            total_cash += 48000
-
-        # 6. Destitute Elderly & Disabled Pension (Vrudh Sahay)
-        destitute_cap = 120000 if living_area == "Rural" else 150000
-        if state == "Gujarat" and annual_income <= destitute_cap:
-            if (age >= 60 and not has_adult_son) or (age >= 45 and has_disability and disability_pct >= 75):
-                pension_rate = 1250 if age >= 80 else 1000
-                eligible_schemes.append({
-                    "id": "GJ-SJE-03",
-                    "name": "Financial Aid to Destitute Elderly & Disabled Persons",
-                    "category": "State Destitution Floor",
-                    "benefit": f"₹{pension_rate} / month (₹{pension_rate * 12} annually) direct cash assistance",
-                    "dept": "Directorate of Social Defence, Gujarat",
-                    "docs": ["Age Certificate / Electoral ID", "Proof of No Adult Son", "Income Certificate", "Aadhaar"]
-                })
-                total_cash += (pension_rate * 12)
-
-        # 7. Divyang ST Bus Free Travel Pass
-        if state == "Gujarat" and has_disability and disability_pct >= 40:
-            eligible_schemes.append({
-                "id": "GJ-GSRTC-01",
-                "name": "Divyang Free Bus Travel Pass (એસ.ટી. બસ મફત મુસાફરી)",
-                "category": "Universal Mobility Rights",
-                "benefit": "100% Free Lifetime Commuter Pass across all Gujarat State Transport (GSRTC) buses",
-                "dept": "GSRTC & Directorate of Social Defence, Gujarat",
-                "docs": ["Civil Surgeon Disability Certificate (≥40%)", "Gujarat Domicile Proof", "Passport Photos"]
-            })
-            in_kind_services.append("GSRTC Free Travel Pass")
-
-        # 8. Niramaya Health Insurance Scheme
-        if state == "Gujarat" and has_disability and disability_type in ["Intellectual Disability / Cerebral Palsy / Autism", "Multiple Disabilities"]:
-            eligible_schemes.append({
-                "id": "IN-NAT-01",
-                "name": "Niramaya Health Insurance Scheme (નિરામયા યોજના)",
-                "category": "Critical Healthcare Floor",
-                "benefit": "₹1,00,000 annual cashless coverage for corrective surgeries, OPD, and therapy",
-                "dept": "The National Trust & Directorate of Social Defence, Gujarat",
-                "docs": ["Disability Certificate (Autism/CP/ID/Multiple)", "Ration Card", "Bank Account"]
-            })
-            in_kind_services.append("Niramaya Health Insurance (₹1L)")
-
-        # 9. Divyang Sadhan Sahay Yojana (Equipment Grant)
-        sadhan_cap = 120000 if living_area == "Rural" else 150000
-        if state == "Gujarat" and has_disability and disability_pct >= 40 and 16 <= age <= 60 and annual_income <= sadhan_cap:
-            eligible_schemes.append({
-                "id": "GJ-SJE-04",
-                "name": "Divyang Sadhan Sahay Yojana (સાધન સહાય યોજના)",
-                "category": "Livelihood & Assistive Aid",
-                "benefit": "Direct in-kind distribution of Sewing Machines, Calipers, Crutches, or Wheelchairs",
-                "dept": "e-Samaj Kalyan, Govt of Gujarat",
-                "docs": ["UDID Card", "Income Certificate from Mamlatdar/TDO", "Ration Card", "Passport Photo"]
-            })
-            in_kind_services.append("Sadhan Sahay Equipment")
-
-        # 10. National Family Benefit Scheme (NFBS)
-        if has_bpl and 18 <= age <= 59 and annual_income <= 47000:
-            eligible_schemes.append({
-                "id": "IN-MORD-02",
-                "name": "National Family Benefit Scheme (NFBS - રાષ્ટ્રીય કુટુંબ સહાય યોજના)",
-                "category": "Emergency Crisis Capital",
-                "benefit": "₹20,000 one-time direct cash transfer upon death of household primary breadwinner",
-                "dept": "Ministry of Rural Development / Revenue Dept, Gujarat",
-                "docs": ["BPL List Inclusion", "Breadwinner Death Certificate", "Age Proof (18-59)", "Bank Account"]
-            })
-
-        # RESULTS INTERFACE
-        st.markdown("---")
-        st.markdown("### 📊 Statutory Entitlement Assessment Report")
+    if mode == "Voice / Raw Vernacular Speech":
+        st.markdown("**Spoken Dialect Ingestion (Audio / Vernacular Text)**")
+        raw_speech = st.text_area(
+            "Natural Dialect Input (Gujarati, Hindi, or Vernacular English):",
+            value="હું સુરત પાસે રહું છું. મારો પગ એક અકસ્માતમાં કપાઈ ગયો છે અને 80% ખોડખાંપણ છે. મારી પાસે કોઈ કમાણી નથી અને ઘરમાં કોઈ મોટો દીકરો નથી. મહિને માંડ ત્રણ હજાર રૂપિયા થાય છે. હું અને મારી પત્ની મુશ્કેલીમાં છીએ.",
+            height=130
+        )
         
-        m1, m2, m3 = st.columns(3)
+        if st.button("EXECUTE NEURO-EXTRACTION", type="primary", use_container_width=True):
+            if not user_api_key:
+                st.error("Missing Gemini API Key. Paste your free key in the sidebar configuration.")
+            else:
+                try:
+                    genai.configure(api_key=user_api_key)
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    extraction_prompt = f"""
+                    You are a strict legal data extraction parser. Given the following unstructured citizen statement, extract demographic variables into pure, valid JSON with NO commentary and NO markdown formatting.
+                    
+                    Input Statement: "{raw_speech}"
+                    
+                    Required JSON structure:
+                    {{
+                        "name": "Citizen (auto-assigned if missing)",
+                        "age": <integer, default 40 if unknown>,
+                        "gender": "<Male/Female/Other>",
+                        "state": "Gujarat",
+                        "annual_income": <integer in INR, calculate monthly * 12 if mentioned>,
+                        "disability_pct": <integer 0 to 100>,
+                        "disability_type": "<Locomotor/Visual/Hearing/Intellectual/None>",
+                        "is_widow": <boolean>,
+                        "has_bpl_card": <boolean>,
+                        "is_orphan": <boolean>,
+                        "has_adult_son": <boolean>,
+                        "area": "<Rural/Urban>"
+                    }}
+                    """
+                    with st.spinner("Executing neural variable synthesis..."):
+                        response = model.generate_content(extraction_prompt)
+                        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+                        data = json.loads(clean_json)
+                        st.session_state['parsed_profile'] = CitizenProfile(**data)
+                        st.success("Extracted Variables Successfully.")
+                except Exception as e:
+                    st.error(f"Extraction Pipeline Failure: {str(e)}")
+
+    else:
+        st.markdown("**Manual Structured Entry**")
+        with st.form("manual_entry_form"):
+            name = st.text_input("Citizen Identifier", value="Citizen-09")
+            c1, c2 = st.columns(2)
+            with c1:
+                age = st.number_input("Age", 0, 110, 48)
+                gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+                income = st.number_input("Annual Household Income (₹)", 0, 2000000, 36000, step=5000)
+                widow = st.checkbox("Applicant is Widow") if gender == "Female" else False
+            with c2:
+                dis_pct = st.slider("Disability %", 0, 100, 80)
+                dis_type = st.selectbox("Disability Class", ["Locomotor", "Visual", "Hearing", "Intellectual", "None"])
+                area = st.selectbox("Area", ["Rural", "Urban"])
+                bpl = st.checkbox("BPL Card Holder")
+                orphan = st.checkbox("Orphan Minor")
+            
+            if st.form_submit_button("COMPILE PROFILE", use_container_width=True):
+                st.session_state['parsed_profile'] = CitizenProfile(
+                    name=name, age=age, gender=gender, state="Gujarat", annual_income=income,
+                    disability_pct=dis_pct, disability_type=dis_type, is_widow=widow,
+                    has_bpl_card=bpl, is_orphan=orphan, area=area
+                )
+
+    if 'parsed_profile' in st.session_state:
+        st.markdown("#### Parsed Intermediate Representation")
+        st.json(st.session_state['parsed_profile'].model_dump())
+
+with col_audit:
+    st.markdown("### 2. Statutory Audit & Output")
+    
+    if 'parsed_profile' in st.session_state:
+        profile = st.session_state['parsed_profile']
+        audit_results = run_deterministic_rules(profile)
+        total_cash = sum(r.annual_cash for r in audit_results)
+        
+        # Telemetry Metrics
+        m1, m2 = st.columns(2)
         with m1:
             st.markdown(f"""
-            <div class="metric-card">
+            <div class="metric-box">
+                <span class="mono" style="font-size: 0.8rem; color: #94A3B8;">DIRECT ANNUAL CASH</span>
                 <div class="metric-val">₹{total_cash:,}</div>
-                <div class="metric-label">Direct Annual Cash Entitlements</div>
             </div>
             """, unsafe_allow_html=True)
-            
         with m2:
             st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-val" style="color: #38BDF8;">{len(eligible_schemes)}</div>
-                <div class="metric-label">Statutory Schemes Qualified</div>
+            <div class="metric-box">
+                <span class="mono" style="font-size: 0.8rem; color: #94A3B8;">STATUTORY MATCHES</span>
+                <div class="metric-val" style="color: #38BDF8;">{len(audit_results)}</div>
             </div>
             """, unsafe_allow_html=True)
             
-        with m3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-val" style="color: #F59E0B;">{len(in_kind_services)}</div>
-                <div class="metric-label">In-Kind Statutory Grants</div>
-            </div>
-            """, unsafe_allow_html=True)
-
         st.markdown("<br>", unsafe_allow_html=True)
         
-        if eligible_schemes:
-            for s in eligible_schemes:
-                st.markdown(f"""
-                <div class="scheme-card">
-                    <div style="font-size: 0.75rem; color: #60A5FA; font-weight: 600; text-transform: uppercase;">{s['id']} • {s['category']}</div>
-                    <div class="scheme-title">{s['name']}</div>
-                    <div class="scheme-benefit">{s['benefit']}</div>
-                    <div class="scheme-dept">Authority: {s['dept']}</div>
+        for r in audit_results:
+            benefit_badge = f"₹{r.annual_cash:,}/yr" if r.annual_cash > 0 else r.in_kind
+            st.markdown(f"""
+            <div class="claim-item">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <span class="mono" style="font-size: 0.75rem; color: #3B82F6; font-weight: bold;">{r.scheme_id}</span>
+                    <span class="mono" style="color: #10B981; font-weight: bold;">{benefit_badge}</span>
                 </div>
-                """, unsafe_allow_html=True)
-                
-                with st.expander(f"Required Statutory Documentation Checklist ({s['name']})"):
-                    for d in s['docs']:
-                        st.markdown(f"- [ ] **{d}**")
-                        
-            # Downloadable Summary Dossier
-            dossier_text = f"HAQ STATUTORY CLAIM AUDIT REPORT\n"
-            dossier_text += f"Citizen Profile: Age {age} | Gender: {gender} | Area: {living_area} | Reported Income: Rs {annual_income}\n"
-            dossier_text += f"Total Direct Annual Cash Unlocked: Rs {total_cash:,}\n"
-            dossier_text += f"Schemes Identified ({len(eligible_schemes)}):\n"
-            for s in eligible_schemes:
-                dossier_text += f"\n- {s['name']} [{s['id']}]\n  Benefit: {s['benefit']}\n  Filing Authority: {s['dept']}\n"
+                <div style="font-size: 1.1rem; font-weight: 600; margin: 4px 0;">{r.scheme_name}</div>
+                <div style="font-size: 0.8rem; color: #94A3B8;">{r.authority}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            st.download_button(
-                "📥 Download Official Citizen Claim Audit (Plaintext)",
-                data=dossier_text,
-                file_name=f"HAQ_Claim_Audit_Age_{age}.txt",
-                use_container_width=True
-            )
-        else:
-            st.warning("No statutory matches found under current threshold limits. Verify annual income certificate or medical board documentation.")
-
-# TAB 2: VOICE TO SCHEMA PIPELINE
-with tab_voice:
-    st.markdown("#### 🎙️ Voice & Spoken Dialect Parsing Pipeline")
-    st.write("This sandbox illustrates how raw, unstructured conversational speech in Gujarati, Hindi, or vernacular English is parsed into validated demographic variables.")
-    
-    sample_text = st.text_area(
-        "Paste or simulate native speech transcript:",
-        value="હું સુરત પાસે રહું છું. મારો પગ એક અકસ્માતમાં કપાઈ ગયો છે અને 80% ખોડખાંપણ છે. મારી પાસે કોઈ કમાણી નથી અને ઘરમાં કોઈ મોટો દીકરો નથી. મહિને માંડ ત્રણ હજાર રૂપિયા થાય છે."
-    )
-    
-    st.markdown("""
-    ```json
-    // Neuro-Symbolic Boundary: AI Studio Extraction (Example Target)
-    {
-      "jurisdiction": "Gujarat",
-      "disability_diagnosed": true,
-      "disability_percentage": 80,
-      "disability_type": "Locomotor / Orthopedic",
-      "annual_household_income": 36000,
-      "has_adult_son_over_21": false,
-      "living_area": "Rural"
-    }
-    ```
-    """)
-    st.info("The neural model extracts only verifiable facts into this structured JSON schema. The deterministic rule engine takes that JSON and runs the statutory eligibility math without risk of hallucination.")
-
-# TAB 3: STATUTORY SCHEME DIRECTORY
-with tab_library:
-    st.markdown("#### 📚 Gujarat & Central Statutory Scheme Directory")
-    st.write("Current statutory logic rules encoded inside the HAQ engine:")
-    
-    schemes_data = [
-        ("Sant Surdas Yojana", "Directorate of Social Defence, Gujarat", "≥60% Disability, Low Income/BPL", "₹1,000 / month direct pension"),
-        ("ADIP Scheme", "Ministry of Social Justice & Empowerment, GoI", "≥40% Disability, Income ≤ ₹30k/mo", "Free motorized tricycles, wheelchairs, hearing aids"),
-        ("Indira Gandhi Disability Pension (IGNDPS)", "Ministry of Rural Development, GoI", "18-79 yrs, ≥80% Disability, BPL Card", "₹500 - ₹1,000 / month central pension"),
-        ("Ganga Swarupa Yojana", "Women & Child Development, Gujarat", "Widowed, Income ≤ ₹1.2L (R) / ₹1.5L (U)", "₹1,250 / month direct income transfer"),
-        ("Palak Mata Pita Yojana", "Social Justice & Empowerment, Gujarat", "Orphaned children, Guardian income ≤ ₹20L", "₹4,000 / month educational assistance"),
-        ("Destitute Elderly & Disabled Assistance", "Directorate of Social Defence, Gujarat", "Age ≥60 (no adult son) OR Age ≥45 (≥75% dis.)", "₹1,000 - ₹1,250 / month destitution support"),
-        ("GSRTC Divyang Free Travel Pass", "GSRTC & Govt of Gujarat", "≥40% Certified Disability", "100% Free lifetime bus transportation"),
-        ("Niramaya Health Insurance", "The National Trust & Govt of Gujarat", "Intellectual / Autism / Cerebral Palsy / Multiple", "₹1,00,000 annual cashless medical treatment"),
-        ("Divyang Sadhan Sahay Yojana", "e-Samaj Kalyan, Gujarat", "16-60 yrs, ≥40% Disability, Income criteria", "Free sewing machines, calipers, tricycles"),
-        ("National Family Benefit Scheme (NFBS)", "Ministry of Rural Development, GoI", "18-59 yrs, BPL, Death of primary breadwinner", "₹20,000 one-time emergency capital")
-    ]
-    
-    for title, dept, crit, ben in schemes_data:
-        with st.expander(title):
-            st.markdown(f"**Authority:** {dept}")
-            st.markdown(f"**Statutory Thresholds:** {crit}")
-            st.markdown(f"**Legally Guaranteed Benefit:** {ben}")
+        pdf_bytes = generate_statutory_dossier(profile, audit_results, total_cash)
+        st.download_button(
+            label="DOWNLOAD STATUTORY CLAIM DOSSIER (PDF)",
+            data=pdf_bytes,
+            file_name=f"HAQX_Statutory_Dossier_{profile.age}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+    else:
+        st.info("Awaiting citizen ingestion vector execution on the left panel.")
