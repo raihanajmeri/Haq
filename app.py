@@ -36,7 +36,6 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Terminal/Telemetry Bar */
     .telemetry-bar {
         background-color: #0B0F19;
         border: 1px solid #1E293B;
@@ -61,7 +60,6 @@ st.markdown("""
         box-shadow: 0 0 8px #10B981;
     }
 
-    /* Sovereign Cards */
     .metric-box {
         background: #0B0F19;
         border: 1px solid #1E293B;
@@ -297,7 +295,19 @@ with col_input:
             else:
                 try:
                     genai.configure(api_key=user_api_key)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    # Robust multi-model selector
+                    model = None
+                    for model_name in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']:
+                        try:
+                            test_model = genai.GenerativeModel(model_name)
+                            model = test_model
+                            break
+                        except:
+                            continue
+                    
+                    if not model:
+                        model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     
                     extraction_prompt = f"""
                     You are a strict legal data extraction parser. Given the following unstructured citizen statement, extract demographic variables into pure, valid JSON with NO commentary and NO markdown formatting.
@@ -307,17 +317,17 @@ with col_input:
                     Required JSON structure:
                     {{
                         "name": "Citizen (auto-assigned if missing)",
-                        "age": <integer, default 40 if unknown>,
-                        "gender": "<Male/Female/Other>",
+                        "age": 40,
+                        "gender": "Male",
                         "state": "Gujarat",
-                        "annual_income": <integer in INR, calculate monthly * 12 if mentioned>,
-                        "disability_pct": <integer 0 to 100>,
-                        "disability_type": "<Locomotor/Visual/Hearing/Intellectual/None>",
-                        "is_widow": <boolean>,
-                        "has_bpl_card": <boolean>,
-                        "is_orphan": <boolean>,
-                        "has_adult_son": <boolean>,
-                        "area": "<Rural/Urban>"
+                        "annual_income": 36000,
+                        "disability_pct": 80,
+                        "disability_type": "Locomotor",
+                        "is_widow": false,
+                        "has_bpl_card": false,
+                        "is_orphan": false,
+                        "has_adult_son": false,
+                        "area": "Rural"
                     }}
                     """
                     with st.spinner("Executing neural variable synthesis..."):
@@ -365,7 +375,6 @@ with col_audit:
         audit_results = run_deterministic_rules(profile)
         total_cash = sum(r.annual_cash for r in audit_results)
         
-        # Telemetry Metrics
         m1, m2 = st.columns(2)
         with m1:
             st.markdown(f"""
