@@ -1,2 +1,5 @@
 streamlit
 pydantic
+google-generativeai
+reportlab
+streamlit-mic-recorder
