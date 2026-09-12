@@ -955,10 +955,10 @@ def generate_pdf_dossier(result: EvaluationResult) -> bytes:
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
         title="HAQX SOVEREIGN STATUTORY CLAIM AUDIT",
         author="HAQX Core v2.0-Sovereign",
     )
@@ -967,56 +967,70 @@ def generate_pdf_dossier(result: EvaluationResult) -> bytes:
 
     s_title = ParagraphStyle(
         "HaqxTitle", parent=styles["Title"],
-        fontName="Helvetica-Bold", fontSize=18, leading=22,
+        fontName="Helvetica-Bold", fontSize=15, leading=18,
         textColor=PDF_OBSIDIAN, alignment=TA_CENTER,
-        spaceAfter=2 * mm,
+        spaceAfter=1.5 * mm,
     )
     s_subtitle = ParagraphStyle(
         "HaqxSubtitle", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=8, leading=10,
+        fontName="Helvetica", fontSize=7.5, leading=9.5,
         textColor=PDF_MID_GRAY, alignment=TA_CENTER,
-        spaceAfter=4 * mm,
+        spaceAfter=2 * mm,
     )
     s_section = ParagraphStyle(
         "HaqxSection", parent=styles["Heading2"],
-        fontName="Helvetica-Bold", fontSize=11, leading=14,
-        textColor=PDF_OBSIDIAN, spaceBefore=6 * mm, spaceAfter=3 * mm,
-        borderPadding=(0, 0, 2, 0),
+        fontName="Helvetica-Bold", fontSize=10, leading=13,
+        textColor=PDF_OBSIDIAN, spaceBefore=4 * mm, spaceAfter=2 * mm,
     )
     s_body = ParagraphStyle(
         "HaqxBody", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=9, leading=12,
+        fontName="Helvetica", fontSize=8, leading=10.5,
         textColor=black,
+    )
+    s_th = ParagraphStyle(
+        "HaqxTableHead", parent=styles["Normal"],
+        fontName="Helvetica-Bold", fontSize=7.5, leading=9.5,
+        textColor=PDF_WHITE, alignment=TA_LEFT,
+    )
+    s_td = ParagraphStyle(
+        "HaqxTableCell", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=7.5, leading=9.5,
+        textColor=black,
+    )
+    s_td_bold = ParagraphStyle(
+        "HaqxTableCellBold", parent=s_td,
+        fontName="Helvetica-Bold",
     )
     s_mono = ParagraphStyle(
         "HaqxMono", parent=styles["Normal"],
-        fontName="Courier", fontSize=7.5, leading=10,
+        fontName="Courier", fontSize=6.5, leading=8.5,
         textColor=PDF_MID_GRAY, alignment=TA_CENTER,
     )
     s_callout = ParagraphStyle(
         "HaqxCallout", parent=styles["Normal"],
-        fontName="Helvetica-Bold", fontSize=12, leading=16,
+        fontName="Helvetica-Bold", fontSize=10.5, leading=13.5,
         textColor=PDF_OBSIDIAN, alignment=TA_CENTER,
-        spaceBefore=4 * mm, spaceAfter=4 * mm,
+        spaceBefore=1 * mm, spaceAfter=1 * mm,
     )
     s_small = ParagraphStyle(
         "HaqxSmall", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=7.5, leading=10,
+        fontName="Helvetica", fontSize=6.5, leading=8.5,
         textColor=PDF_MID_GRAY,
     )
     s_check_header = ParagraphStyle(
         "HaqxCheckHeader", parent=styles["Normal"],
-        fontName="Helvetica-Bold", fontSize=9.5, leading=12,
-        textColor=PDF_OBSIDIAN, spaceBefore=3 * mm, spaceAfter=1.5 * mm,
+        fontName="Helvetica-Bold", fontSize=8.5, leading=10.5,
+        textColor=PDF_OBSIDIAN, spaceBefore=2 * mm, spaceAfter=1 * mm,
     )
     s_check_item = ParagraphStyle(
         "HaqxCheckItem", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=8.5, leading=11,
-        textColor=black, leftIndent=8 * mm,
+        fontName="Helvetica", fontSize=7.5, leading=9.5,
+        textColor=black, leftIndent=5 * mm,
     )
 
     flowables = []
 
+    # Title & Telemetry Header
     flowables.append(Paragraph("HAQX SOVEREIGN STATUTORY CLAIM AUDIT", s_title))
     flowables.append(Paragraph(
         f"HAQX Core {VERSION} &nbsp;·&nbsp; Deterministic Neuro-Symbolic Engine &nbsp;·&nbsp; "
@@ -1025,48 +1039,149 @@ def generate_pdf_dossier(result: EvaluationResult) -> bytes:
     ))
 
     hash_line = (
-        f"EXECUTION HASH: {result.execution_hash} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"SESSION: {result.session_id} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"EXECUTION HASH: {result.execution_hash} &nbsp;|&nbsp; "
+        f"SESSION: {result.session_id} &nbsp;|&nbsp; "
         f"TIMESTAMP: {result.timestamp}"
     )
     flowables.append(Paragraph(hash_line, s_mono))
-    flowables.append(Spacer(1, 3 * mm))
+    flowables.append(Spacer(1, 2 * mm))
     flowables.append(HRFlowable(width="100%", thickness=0.5, color=PDF_LIGHT_GRAY))
-    flowables.append(Spacer(1, 4 * mm))
+    flowables.append(Spacer(1, 2 * mm))
 
+    # Section I: Metadata Grid
     flowables.append(Paragraph("I. CITIZEN METADATA", s_section))
     c = result.citizen
-    meta_data = [
-        ["FIELD", "VALUE"],
-        ["Full Name / Identifier", c.full_name],
-        ["Age", str(c.age)],
-        ["Gender", c.gender.capitalize()],
-        ["Marital Status", c.marital_status.capitalize()],
-        ["Disability Certification", f"{c.disability_percentage}%"],
-        ["Disability Types", ", ".join(c.disability_types) if c.disability_types else "None declared"],
-        ["Declared Annual Income", f"INR {c.annual_income:,.0f}"],
-        ["Monthly Household Income", f"INR {c.monthly_household_income:,.0f}"],
-        ["Jurisdiction", f"{c.state} — {c.area.capitalize()} Area"],
-        ["BPL Status", f"{'Yes' if c.is_bpl else 'No'}" + (f" (Score: {c.bpl_score})" if c.bpl_score is not None else "")],
-        ["Gujarat Domicile", "Yes" if c.is_gujarat_domicile else "No"],
+    meta_raw = [
+        ["Full Name / Identifier", c.full_name, "Age / Gender", f"{c.age} yrs / {c.gender.capitalize()}"],
+        ["Disability Cert.", f"{c.disability_percentage}% ({', '.join(c.disability_types) if c.disability_types else 'None'})", "Marital Status", c.marital_status.capitalize()],
+        ["Declared Income", f"INR {c.annual_income:,.0f}/yr (INR {c.monthly_household_income:,.0f}/mo)", "Jurisdiction", f"{c.state} ({c.area.capitalize()})"],
+        ["BPL Status", f"{'Yes' if c.is_bpl else 'No'}" + (f" (Score: {c.bpl_score})" if c.bpl_score is not None else ""), "Gujarat Domicile", "Yes" if c.is_gujarat_domicile else "No"],
     ]
-    meta_table = Table(meta_data, colWidths=[55 * mm, 115 * mm])
+
+    meta_wrapped = [
+        [Paragraph(f"<b>{row[0]}</b>", s_td), Paragraph(row[1], s_td),
+         Paragraph(f"<b>{row[2]}</b>", s_td), Paragraph(row[3], s_td)]
+        for row in meta_raw
+    ]
+
+    meta_table = Table(meta_wrapped, colWidths=[38 * mm, 53 * mm, 38 * mm, 53 * mm])
     meta_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), PDF_OBSIDIAN),
-        ("TEXTCOLOR", (0, 0), (-1, 0), PDF_WHITE),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("LEADING", (0, 0), (-1, -1), 11),
-        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.4, PDF_LIGHT_GRAY),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [PDF_WHITE, HexColor("#F1F5F9")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [PDF_WHITE, HexColor("#F8FAFC")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
     ]))
+    flowables.append(meta_table)
+    flowables.append(Spacer(1, 3 * mm))
+
+    # Section II: Ledger Table (With full word-wrap)
+    flowables.append(Paragraph("II. STATUTORY ENTITLEMENT AUDIT LEDGER", s_section))
+    qualified_schemes = [s for s in result.schemes if s.qualified]
+    disqualified_schemes = [s for s in result.schemes if not s.qualified]
+
+    if qualified_schemes:
+        ledger_rows = [[
+            Paragraph("SCHEME ID", s_th),
+            Paragraph("SCHEME NAME", s_th),
+            Paragraph("ADMINISTERING BODY", s_th),
+            Paragraph("LEGALLY GUARANTEED BENEFIT", s_th)
+        ]]
+
+        for s in qualified_schemes:
+            benefit_parts = []
+            if s.annual_cash_value > 0:
+                benefit_parts.append(f"<b>INR {s.annual_cash_value:,.0f}/yr</b> (INR {s.monthly_cash_value:,.0f}/mo DBT)")
+            elif s.one_time_cash_value > 0:
+                benefit_parts.append(f"<b>INR {s.one_time_cash_value:,.0f}</b> (One-time DBT)")
+            if s.hardware_grants:
+                benefit_parts.append("Hardware: " + "; ".join(s.hardware_grants))
+            if s.service_grants:
+                benefit_parts.append("Service: " + "; ".join(s.service_grants[:2]))
+
+            b_str = "<br/>".join(benefit_parts) if benefit_parts else "Statutory Grant"
+
+            ledger_rows.append([
+                Paragraph(s.scheme_id, s_td_bold),
+                Paragraph(s.scheme_name, s_td),
+                Paragraph(s.administering_body, s_td),
+                Paragraph(b_str, s_td)
+            ])
+
+        col_w = [32 * mm, 46 * mm, 46 * mm, 58 * mm]
+        ledger_table = Table(ledger_rows, colWidths=col_w, repeatRows=1)
+        ledger_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), PDF_OBSIDIAN),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("GRID", (0, 0), (-1, -1), 0.3, PDF_LIGHT_GRAY),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [PDF_WHITE, HexColor("#F8FAFC")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        flowables.append(ledger_table)
+    else:
+        flowables.append(Paragraph("No statutory entitlements qualified under current parameters.", s_body))
+
+    flowables.append(Spacer(1, 3 * mm))
+
+    # Metrics Summary Box
+    callout_data = [
+        [Paragraph(
+            f"AGGREGATE DIRECT ANNUAL CASH UNLOCKED: INR {result.total_annual_cash:,.0f}/yr"
+            + (f" &nbsp;+&nbsp; INR {result.total_one_time_cash:,.0f} ONE-TIME" if result.total_one_time_cash > 0 else ""),
+            s_callout
+        )],
+        [Paragraph(
+            f"Qualified: {result.total_schemes_qualified} of 12 &nbsp;|&nbsp; "
+            f"Hardware Allocations: {result.total_hardware_items} &nbsp;|&nbsp; "
+            f"Service Grants: {result.total_service_items}",
+            ParagraphStyle("CalloutSub", parent=s_body, fontSize=7.5, alignment=TA_CENTER, textColor=PDF_MID_GRAY)
+        )]
+    ]
+    callout_table = Table(callout_data, colWidths=[182 * mm])
+    callout_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), HexColor("#ECFDF5")),
+        ("BOX", (0, 0), (-1, -1), 1, PDF_EMERALD),
+        ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+    ]))
+    flowables.append(callout_table)
+    flowables.append(Spacer(1, 3 * mm))
+
+    # Section III: Document Checklist
+    if qualified_schemes:
+        flowables.append(Paragraph("III. STATUTORY VERIFICATION & SUBMISSION CHECKLIST", s_section))
+        for s in qualified_schemes:
+            flowables.append(Paragraph(f"<b>{s.scheme_id}</b> — {s.scheme_name}", s_check_header))
+            flowables.append(Paragraph(f"<i>Authority: {s.administering_body}</i>", ParagraphStyle("Cit", parent=s_small, leftIndent=3 * mm)))
+            for req_doc in s.required_documents:
+                flowables.append(Paragraph(f"[  ] {req_doc}", s_check_item))
+            flowables.append(Spacer(1, 1.5 * mm))
+
+    # Section IV: Transparency Audit
+    if disqualified_schemes:
+        flowables.append(Spacer(1, 2 * mm))
+        flowables.append(Paragraph("IV. SCHEMES NOT QUALIFIED (AUDIT TRAIL)", s_section))
+        for s in disqualified_schemes:
+            reasons_joined = "; ".join(s.disqualification_reasons) if s.disqualification_reasons else "Criteria not met."
+            flowables.append(Paragraph(
+                f"<b>{s.scheme_id} — {s.scheme_name}:</b> {reasons_joined}",
+                ParagraphStyle("Disq", parent=s_body, fontSize=7, leading=9, textColor=PDF_MID_GRAY, spaceAfter=1 * mm)
+            ))
+
+    flowables.append(Spacer(1, 4 * mm))
+    flowables.append(HRFlowable(width="100%", thickness=0.3, color=PDF_LIGHT_GRAY))
+    flowables.append(Spacer(1, 1.5 * mm))
+    flowables.append(Paragraph(
+        f"Generated by HAQX Core {VERSION} · UN SDG 1.3 · Machine-generated legal audit artifact.",
+        ParagraphStyle("Foot", parent=s_small, alignment=TA_CENTER)
+    ))
+
+    doc.build(flowables)
+    return buf.getvalue()
     flowables.append(meta_table)
     flowables.append(Spacer(1, 5 * mm))
 
