@@ -50,11 +50,54 @@ MUTED = "#94A3B8"
 RED_ALERT = "#EF4444"
 
 GEMINI_MODELS = [
+    "gemini-3.6-flash",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
     "gemini-1.5-flash",
     "gemini-1.5-pro",
 ]
+
+def call_gemini_api(text: str, api_key: str) -> Tuple[Optional[Dict], str, str]:
+    if not api_key or not api_key.strip():
+        return None, "", "No API key provided."
+        
+    last_error_msg = ""
+    clean_key = api_key.strip()
+    
+    combined_prompt = f"{GEMINI_SYSTEM_PROMPT}\n\nCITIZEN INPUT STATEMENT:\n{text}"
+    
+    for model_name in GEMINI_MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={clean_key}"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": combined_prompt}]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+            },
+        }
+        try:
+            resp = requests.post(url, json=payload, timeout=20)
+            data = resp.json()
+            
+            if resp.status_code == 200:
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        raw_text = parts[0].get("text", "").strip()
+                        cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+                        parsed = json.loads(cleaned)
+                        return parsed, model_name, ""
+            else:
+                last_error_msg = data.get("error", {}).get("message", f"HTTP {resp.status_code}")
+        except Exception as e:
+            last_error_msg = str(e)
+            continue
+            
+    return None, "", f"API Error: {last_error_msg if last_error_msg else 'Endpoints rejected request.'}"
 
 DISABILITY_TYPE_OPTIONS = [
     "Locomotor", "Visual", "Hearing", "Speech & Language",
